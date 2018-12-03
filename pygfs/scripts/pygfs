@@ -1,0 +1,84 @@
+#!/usr/bin/env python
+
+'''
+description:    Download weather forecasts from GFS
+license:        APACHE 2.0
+author:         Ronald van Haren, NLeSC (r.vanharen@esciencecenter.nl)
+'''
+
+import configargparse
+from pygfs.gfs import gfs
+import dateutil.parser
+import os
+import sys
+
+
+def cli_parser():
+    '''
+    parse command line arguments
+    '''
+    cfile = os.path.join(sys.prefix, 'etc', 'pygfs', 'pygfs.config')
+    parser = configargparse.ArgumentParser(
+      default_config_files=[cfile],
+      description='Create VOEvent XML file from FRB database')
+    parser.add('-c', '--my-config',
+               required=False,
+               is_config_file=True,
+               help='config file path')
+    parser.add('-e', '--email',
+               required=True,
+               help='https://rda.ucar.edu email registration')
+    parser.add('-p', '--password',
+               required=True,
+               help='https://rda.ucar.edu password')
+    parser.add('-d', '--date',
+               required=True,
+               help="Start date of GFS forecast - format YYYY-MM-DD",
+               type=dateutil.parser.isoparse)
+    parser.add('-r', '--resolution',
+               required=False,
+               help='Forecast resolution',
+               type=float,
+               choices=[0.25, 0.5],
+               default=0.25)
+    parser.add('-f', '--fcsthours',
+               required=False,
+               help="Forecast hours (array)",
+               type=int,
+               nargs='+',
+               default=[6, 12, 18])
+    # parse arguments
+    results = vars(parser.parse_args())
+    # check validity fcsthours
+    valid_fcsthours(results['fcsthours'])  # TODO: move to utils function
+    main(results['email'], results['password'], results['resolution'],
+         results['date'], results['fcsthours'])
+
+
+def valid_fcsthours(f):
+    '''
+    Check if the forecast hours specified are all valid and unique
+    '''
+    # check if all fcsthours are unique
+    checked = set()
+    if any(i in checked or checked.add(i) for i in f):
+        print('\n Error: Not all supplied forecast hours are unique\n')
+        sys.exit()
+    # check if all individual ints are valid forecast hours
+    valid = [*range(6, 48, 6)]  # python >3.5
+    if not set(f).issubset(set(valid)):
+        print('\n Error: Not a valid subset of forecast hours,',
+              'valid hours are' + str(valid) + '\n')
+        sys.exit()
+
+
+def main(email, password, resolution, date, fcsthours):
+    g = gfs()
+    # login
+    g.connect(email, password)
+    # download
+    g.download(date, fcsthours, resolution)
+
+
+if __name__ == "__main__":
+    cli_parser()
